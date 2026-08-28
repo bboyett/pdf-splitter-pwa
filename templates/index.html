@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PDF Splitter</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div id="connection-banner" class="hidden" role="alert">
+    <span class="dot"></span>
+    <span id="connection-banner-msg">Can't reach the server — actions won't work right now.</span>
+    <button id="connection-retry">Retry</button>
+  </div>
+
+  <header>
+    <h1>PDF Splitter</h1>
+    <p class="hint">Upload a PDF, click on the page to drop cut lines, then split it into normal pages.</p>
+  </header>
+
+  <section id="upload-panel">
+    <input type="file" id="file-input" accept="application/pdf">
+    <button id="upload-btn">Upload</button>
+    <span id="upload-status"></span>
+  </section>
+
+  <section id="workspace" class="hidden">
+    <div id="toolbar">
+      <div class="filename-controls">
+        <label for="filename-input">File name:</label>
+        <input type="text" id="filename-input" value="split.pdf" spellcheck="false">
+      </div>
+      <div class="page-nav">
+        <button id="prev-page">&laquo; Prev</button>
+        <span id="page-indicator">Page 1 of 1</span>
+        <button id="next-page">Next &raquo;</button>
+      </div>
+      <div class="cut-controls">
+        <button id="clear-cuts">Clear cuts on this page</button>
+      </div>
+      <div class="split-controls">
+        <label>
+          Download as:
+          <select id="mode-select">
+            <option value="single">Single multi-page PDF</option>
+            <option value="zip">ZIP of separate PDFs</option>
+          </select>
+        </label>
+        <button id="split-btn">Split &amp; Download</button>
+      </div>
+    </div>
+
+    <p class="hint">Click on the image to add a cut line. Click a line to delete it. Drag a line to adjust it.</p>
+
+    <div id="viewer">
+      <div id="image-wrap">
+        <img id="page-image" draggable="false">
+        <div id="overlay"></div>
+      </div>
+    </div>
+  </section>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

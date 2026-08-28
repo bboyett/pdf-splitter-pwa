@@ -1,0 +1,257 @@
+:root {
+  --line-color: #e74c3c;
+  --line-color-active: #ff9800;
+  --accent: #2d6cdf;
+  --bg: #f5f6f8;
+  --panel-bg: #ffffff;
+  --border: #d9dce1;
+  --text: #1c1f24;
+  --text-muted: #666b72;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  padding: 0 1.5rem 3rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  padding: 1.5rem 0 0.5rem;
+}
+
+h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+
+#upload-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 640px;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#split-btn {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.hidden {
+  display: none !important;
+}
+
+#connection-banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: #dc2626;
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.6rem 1rem;
+}
+
+#connection-banner .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: white;
+  animation: banner-pulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes banner-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+#connection-banner button {
+  background: white;
+  color: #dc2626;
+  border: none;
+  font-weight: 700;
+  padding: 0.3rem 0.7rem;
+}
+
+body.offline #upload-panel,
+body.offline #toolbar,
+body.offline #viewer {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: grayscale(40%);
+}
+
+#toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-top: 1.5rem;
+}
+
+.page-nav, .split-controls, .filename-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filename-controls {
+  order: -1;
+  width: 100%;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+
+.filename-controls label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+#filename-input {
+  flex: 1;
+  max-width: 320px;
+  font-size: 0.95rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+#filename-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#page-indicator {
+  min-width: 8rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+#viewer {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: #333;
+  border-radius: 8px;
+  padding: 1rem;
+  max-height: 78vh;
+  overflow: auto;
+}
+
+#image-wrap {
+  position: relative;
+  line-height: 0;
+}
+
+#page-image {
+  max-width: min(900px, 90vw);
+  height: auto;
+  display: block;
+  user-select: none;
+  background: white;
+}
+
+#overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: crosshair;
+}
+
+.cut-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 10px;
+  margin-top: -5px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+}
+
+.cut-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  height: 2px;
+  background: var(--line-color);
+}
+
+.cut-line.dragging::before {
+  background: var(--line-color-active);
+}
+
+.cut-line .badge {
+  position: absolute;
+  right: 6px;
+  top: -22px;
+  background: var(--line-color);
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.slice-final-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  background: #444;
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}

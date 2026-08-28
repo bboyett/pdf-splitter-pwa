@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDF Splitter</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#2d6cdf">
+
+<!-- iOS: makes "Add to Home Screen" open standalone (no Safari chrome) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PDF Splitter">
+
+<style>
+  :root {
+    --accent: #2d6cdf;
+    --bg: #f5f6f8;
+    --text: #1c1f24;
+    --text-muted: #666b72;
+    --border: #d9dce1;
+    --danger: #dc2626;
+    --danger-bg: #fdecec;
+    --ok: #16a34a;
+    --ok-bg: #eafaf0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.1rem;
+    padding: 2rem 1.5rem;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    text-align: center;
+    transition: background 0.3s ease;
+  }
+  body.state-blocked { background: var(--danger-bg); }
+  body.state-ready { background: var(--ok-bg); }
+
+  .icon {
+    width: 72px;
+    height: 72px;
+  }
+  h1 {
+    font-size: 1.2rem;
+    margin: 0;
+  }
+
+  .status-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: 26rem;
+    width: 100%;
+    padding: 1.25rem 1.5rem;
+    border-radius: 12px;
+    border: 2px solid var(--border);
+    background: white;
+  }
+  .state-blocked .status-card {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+  }
+  .state-ready .status-card {
+    border-color: var(--ok);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 800;
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    color: white;
+    background: var(--danger);
+  }
+  .state-ready .badge { background: var(--ok); }
+
+  .badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: white;
+    animation: pulse 0.9s ease-in-out infinite;
+  }
+  .state-ready .badge .dot { animation: none; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+
+  .status-text {
+    font-size: 0.95rem;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .status-sub {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 4px solid var(--border);
+    border-top-color: var(--danger);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .hidden { display: none !important; }
+
+  .manual-link {
+    margin-top: 0.4rem;
+    display: inline-block;
+    color: var(--danger);
+    border: 1.5px solid var(--danger);
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .manual-link:hover { background: var(--danger-bg); }
+
+  .setup-note {
+    max-width: 32rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+    text-align: left;
+  }
+  .setup-note code {
+    background: var(--bg);
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body id="body" class="state-blocked">
+  <img class="icon" src="icons/icon-192.png" alt="">
+  <h1>PDF Splitter</h1>
+
+  <div id="app-configured">
+    <div class="status-card">
+      <span class="badge" id="badge">
+        <span class="dot"></span>
+        <span id="badge-text">Not ready</span>
+      </span>
+      <div class="spinner" id="spinner"></div>
+      <p class="status-text" id="status">Connecting…</p>
+      <p class="status-sub" id="status-sub">Do not try to use the app yet — it will not respond.</p>
+      <a class="manual-link hidden" id="manual-link" href="#">Force open anyway (will likely fail)</a>
+    </div>
+  </div>
+
+  <div id="not-configured" class="hidden">
+    <p class="setup-note">
+      This launcher isn't pointed at your Render app yet. Open
+      <code>docs/index.html</code> in the repo, set <code>APP_URL</code>
+      near the top of the <code>&lt;script&gt;</code> block to your Render
+      URL, then commit &amp; push.
+    </p>
+  </div>
+
+<script>
+(() => {
+  // --- EDIT THIS after you deploy to Render -------------------------------
+  // Example: "https://pdf-splitter-abcd.onrender.com"
+  const APP_URL = "REPLACE_WITH_RENDER_URL";
+  // -------------------------------------------------------------------------
+
+  const bodyEl = document.getElementById("body");
+  const configuredEl = document.getElementById("app-configured");
+  const notConfiguredEl = document.getElementById("not-configured");
+  const badgeEl = document.getElementById("badge");
+  const badgeTextEl = document.getElementById("badge-text");
+  const statusEl = document.getElementById("status");
+  const statusSubEl = document.getElementById("status-sub");
+  const spinnerEl = document.getElementById("spinner");
+  const manualLinkEl = document.getElementById("manual-link");
+
+  if (!APP_URL || APP_URL.startsWith("REPLACE_WITH")) {
+    configuredEl.classList.add("hidden");
+    notConfiguredEl.classList.remove("hidden");
+    return;
+  }
+
+  const healthUrl = APP_URL.replace(/\/$/, "") + "/health";
+  manualLinkEl.href = APP_URL;
+
+  const TOTAL_TIMEOUT_MS = 3 * 60 * 1000; // give up prompting after 3 min
+  const PER_ATTEMPT_TIMEOUT_MS = 20 * 1000;
+  const RETRY_DELAY_MS = 1500;
+  const MANUAL_LINK_DELAY_MS = 8 * 1000; // don't offer the escape hatch instantly
+
+  const startedAt = Date.now();
+
+  function fetchWithTimeout(url, ms) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    return fetch(url, { cache: "no-store", signal: controller.signal })
+      .finally(() => clearTimeout(timer));
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function setReady() {
+    bodyEl.className = "state-ready";
+    spinnerEl.classList.add("hidden");
+    badgeTextEl.textContent = "Ready";
+    statusEl.textContent = "Ready! Opening app…";
+    statusSubEl.textContent = "";
+  }
+
+  function setBlocked(statusText, subText, elapsedSec) {
+    bodyEl.className = "state-blocked";
+    badgeTextEl.textContent = elapsedSec > 20 ? "Still not ready" : "Not ready";
+    statusEl.textContent = statusText;
+    statusSubEl.textContent = subText;
+  }
+
+  async function waitForServer() {
+    while (true) {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+
+      if (elapsedSec * 1000 > MANUAL_LINK_DELAY_MS) {
+        manualLinkEl.classList.remove("hidden");
+      }
+
+      if (Date.now() - startedAt > TOTAL_TIMEOUT_MS) {
+        spinnerEl.classList.add("hidden");
+        setBlocked(
+          "Still not responding after a few minutes.",
+          "The server may be down — do not expect actions to work. Check the Render dashboard, or try again later.",
+          elapsedSec
+        );
+        return;
+      }
+
+      setBlocked(
+        elapsedSec < 3 ? "Connecting…" : "Server is waking up — not ready yet.",
+        elapsedSec < 3
+          ? "Do not try to use the app yet — it will not respond."
+          : `~${elapsedSec}s so far — can take up to a minute if it's been idle. Anything you try right now will fail.`,
+        elapsedSec
+      );
+
+      try {
+        const res = await fetchWithTimeout(healthUrl, PER_ATTEMPT_TIMEOUT_MS);
+        if (res.ok) {
+          setReady();
+          await sleep(300);
+          window.location.replace(APP_URL);
+          return;
+        }
+        // Non-OK (e.g. a transient 502 while it finishes booting): retry.
+      } catch (e) {
+        // Timeout or network error: keep retrying, it's likely still booting.
+      }
+
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+
+  waitForServer();
+})();
+</script>
+</body>
+</html>
