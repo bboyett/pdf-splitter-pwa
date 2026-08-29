@@ -287,8 +287,13 @@
         types: [{ description: isZip ? "ZIP Archive" : "PDF Document", accept }],
       });
     } catch (e) {
-      if (e.name === "AbortError") return "cancelled";
-      throw e;
+      if (e.name === "AbortError") return "cancelled"; // user hit Cancel — respect it
+      // Anything else (e.g. Chromium's hard "cross-origin sub frames aren't
+      // allowed to show a file picker" restriction when this page is
+      // embedded in an iframe) — treat the picker as unavailable and fall
+      // back to a normal download instead of blocking the whole action.
+      console.warn("Save dialog unavailable, falling back to normal download:", e);
+      return null;
     }
   }
 
