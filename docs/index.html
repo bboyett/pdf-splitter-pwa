@@ -359,6 +359,10 @@
   }
 
   async function waitForServer() {
+    // Shown on screen (no DevTools needed) so the exact failure reason is
+    // visible directly, not just "still waiting".
+    let lastErrorText = "";
+
     while (true) {
       const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
 
@@ -370,7 +374,8 @@
         spinnerEl.classList.add("hidden");
         setBlocked(
           "Still not responding after a few minutes.",
-          "The server may be down — do not expect actions to work. Check the Render dashboard, or try again later.",
+          "The server may be down — do not expect actions to work. Check the Render dashboard, or try again later." +
+            (lastErrorText ? ` Last error: ${lastErrorText}` : ""),
           elapsedSec
         );
         return;
@@ -378,9 +383,10 @@
 
       setBlocked(
         elapsedSec < 3 ? "Connecting…" : "Server is waking up — not ready yet.",
-        elapsedSec < 3
+        (elapsedSec < 3
           ? "Do not try to use the app yet — it will not respond."
-          : `~${elapsedSec}s so far — can take up to a minute if it's been idle. Anything you try right now will fail.`,
+          : `~${elapsedSec}s so far — can take up to a minute if it's been idle. Anything you try right now will fail.`) +
+          (lastErrorText ? ` Last error: ${lastErrorText}` : ""),
         elapsedSec
       );
 
@@ -390,9 +396,12 @@
           setReady();
           return; // stop polling; wait for the user to tap "Continue"
         }
-        // Non-OK (e.g. a transient 502 while it finishes booting): retry.
+        lastErrorText = `server responded HTTP ${res.status}`;
       } catch (e) {
-        // Timeout or network error: keep retrying, it's likely still booting.
+        lastErrorText =
+          e && e.name === "AbortError"
+            ? `timed out after ${PER_ATTEMPT_TIMEOUT_MS / 1000}s waiting for a response`
+            : `${(e && e.name) || "Error"}: ${(e && e.message) || e}`;
       }
 
       await sleep(RETRY_DELAY_MS);
