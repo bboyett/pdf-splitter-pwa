@@ -385,7 +385,7 @@
         elapsedSec < 3 ? "Connecting…" : "Server is waking up — not ready yet.",
         (elapsedSec < 3
           ? "Do not try to use the app yet — it will not respond."
-          : `~${elapsedSec}s so far — can take up to a minute if it's been idle. Anything you try right now will fail.`) +
+          : `~${elapsedSec}s so far — this app boots from Docker, so it can take up to ~2 minutes if it's been idle a while. Anything you try right now will fail.`) +
           (lastErrorText ? ` Last error: ${lastErrorText}` : ""),
         elapsedSec
       );
