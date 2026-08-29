@@ -142,6 +142,19 @@
   }
   .manual-link:hover { background: var(--danger-bg); }
 
+  .continue-link {
+    margin-top: 0.2rem;
+    display: inline-block;
+    color: white;
+    background: var(--ok);
+    border-radius: 8px;
+    padding: 0.65rem 1.3rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .continue-link:hover { opacity: 0.9; }
+
   .setup-note {
     max-width: 32rem;
     font-size: 0.85rem;
@@ -173,6 +186,7 @@
       <p class="status-text" id="status">Connecting…</p>
       <p class="status-sub" id="status-sub">Do not try to use the app yet — it will not respond.</p>
       <a class="manual-link hidden" id="manual-link" href="#">Force open anyway (will likely fail)</a>
+      <a class="continue-link hidden" id="continue-link" href="#">Continue to PDF Splitter &rarr;</a>
     </div>
   </div>
 
@@ -201,6 +215,7 @@
   const statusSubEl = document.getElementById("status-sub");
   const spinnerEl = document.getElementById("spinner");
   const manualLinkEl = document.getElementById("manual-link");
+  const continueLinkEl = document.getElementById("continue-link");
 
   if (!APP_URL || APP_URL.startsWith("REPLACE_WITH")) {
     configuredEl.classList.add("hidden");
@@ -210,6 +225,7 @@
 
   const healthUrl = APP_URL.replace(/\/$/, "") + "/health";
   manualLinkEl.href = APP_URL;
+  continueLinkEl.href = APP_URL;
 
   const TOTAL_TIMEOUT_MS = 3 * 60 * 1000; // give up prompting after 3 min
   const PER_ATTEMPT_TIMEOUT_MS = 20 * 1000;
@@ -229,12 +245,17 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  // Stays on screen until you tap through — it never auto-navigates, so
+  // this green state is always visible long enough to actually see it
+  // (and so "Add to Home Screen" can never accidentally bookmark past it).
   function setReady() {
     bodyEl.className = "state-ready";
     spinnerEl.classList.add("hidden");
+    manualLinkEl.classList.add("hidden");
     badgeTextEl.textContent = "Ready";
-    statusEl.textContent = "Ready! Opening app…";
-    statusSubEl.textContent = "";
+    statusEl.textContent = "Server is awake and ready.";
+    statusSubEl.textContent = "Tap below to open the app.";
+    continueLinkEl.classList.remove("hidden");
   }
 
   function setBlocked(statusText, subText, elapsedSec) {
@@ -274,9 +295,7 @@
         const res = await fetchWithTimeout(healthUrl, PER_ATTEMPT_TIMEOUT_MS);
         if (res.ok) {
           setReady();
-          await sleep(300);
-          window.location.replace(APP_URL);
-          return;
+          return; // stop polling; wait for the user to tap "Continue"
         }
         // Non-OK (e.g. a transient 502 while it finishes booting): retry.
       } catch (e) {
