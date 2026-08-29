@@ -170,34 +170,68 @@
     padding: 0.1rem 0.3rem;
     border-radius: 4px;
   }
+
+  /* Once open, the app fills the whole standalone shell — the top-level
+     page never navigates away from this github.io origin, so iOS never
+     kicks you out into Safari's chrome. */
+  #app-frame {
+    display: none;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: white;
+  }
+  #app-frame:not(.hidden) { display: block; }
+
+  #open-elsewhere {
+    display: none;
+    position: fixed;
+    top: max(0.6rem, env(safe-area-inset-top));
+    right: 0.6rem;
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.55);
+    color: white;
+    font-size: 0.7rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    text-decoration: none;
+  }
+  #open-elsewhere:not(.hidden) { display: inline-block; }
 </style>
 </head>
 <body id="body" class="state-blocked">
-  <img class="icon" src="icons/icon-192.png" alt="">
-  <h1>PDF Splitter</h1>
+  <div id="launcher-chrome">
+    <img class="icon" src="icons/icon-192.png" alt="">
+    <h1>PDF Splitter</h1>
 
-  <div id="app-configured">
-    <div class="status-card">
-      <span class="badge" id="badge">
-        <span class="dot"></span>
-        <span id="badge-text">Not ready</span>
-      </span>
-      <div class="spinner" id="spinner"></div>
-      <p class="status-text" id="status">Connecting…</p>
-      <p class="status-sub" id="status-sub">Do not try to use the app yet — it will not respond.</p>
-      <a class="manual-link hidden" id="manual-link" href="#">Force open anyway (will likely fail)</a>
-      <a class="continue-link hidden" id="continue-link" href="#">Continue to PDF Splitter &rarr;</a>
+    <div id="app-configured">
+      <div class="status-card">
+        <span class="badge" id="badge">
+          <span class="dot"></span>
+          <span id="badge-text">Not ready</span>
+        </span>
+        <div class="spinner" id="spinner"></div>
+        <p class="status-text" id="status">Connecting…</p>
+        <p class="status-sub" id="status-sub">Do not try to use the app yet — it will not respond.</p>
+        <a class="manual-link hidden" id="manual-link" href="#">Force open anyway (will likely fail)</a>
+        <a class="continue-link hidden" id="continue-link" href="#">Continue to PDF Splitter &rarr;</a>
+      </div>
+    </div>
+
+    <div id="not-configured" class="hidden">
+      <p class="setup-note">
+        This launcher isn't pointed at your Render app yet. Open
+        <code>docs/index.html</code> in the repo, set <code>APP_URL</code>
+        near the top of the <code>&lt;script&gt;</code> block to your Render
+        URL, then commit &amp; push.
+      </p>
     </div>
   </div>
 
-  <div id="not-configured" class="hidden">
-    <p class="setup-note">
-      This launcher isn't pointed at your Render app yet. Open
-      <code>docs/index.html</code> in the repo, set <code>APP_URL</code>
-      near the top of the <code>&lt;script&gt;</code> block to your Render
-      URL, then commit &amp; push.
-    </p>
-  </div>
+  <iframe id="app-frame" class="hidden" title="PDF Splitter"></iframe>
+  <a id="open-elsewhere" class="hidden" href="#">Open in Safari instead &#8599;</a>
 
 <script>
 (() => {
@@ -216,6 +250,9 @@
   const spinnerEl = document.getElementById("spinner");
   const manualLinkEl = document.getElementById("manual-link");
   const continueLinkEl = document.getElementById("continue-link");
+  const launcherChromeEl = document.getElementById("launcher-chrome");
+  const appFrameEl = document.getElementById("app-frame");
+  const openElsewhereEl = document.getElementById("open-elsewhere");
 
   if (!APP_URL || APP_URL.startsWith("REPLACE_WITH")) {
     configuredEl.classList.add("hidden");
@@ -226,6 +263,27 @@
   const healthUrl = APP_URL.replace(/\/$/, "") + "/health";
   manualLinkEl.href = APP_URL;
   continueLinkEl.href = APP_URL;
+  openElsewhereEl.href = APP_URL;
+
+  // Embed the app in an iframe instead of navigating to it — navigating
+  // the top-level page to a different origin is what makes iOS kick a
+  // standalone home-screen app out into Safari's chrome. Staying on this
+  // github.io page (with the app inside it) keeps the standalone shell.
+  function openApp() {
+    launcherChromeEl.classList.add("hidden");
+    appFrameEl.src = APP_URL;
+    appFrameEl.classList.remove("hidden");
+    openElsewhereEl.classList.remove("hidden");
+  }
+
+  continueLinkEl.addEventListener("click", (e) => {
+    e.preventDefault();
+    openApp();
+  });
+  manualLinkEl.addEventListener("click", (e) => {
+    e.preventDefault();
+    openApp();
+  });
 
   const TOTAL_TIMEOUT_MS = 3 * 60 * 1000; // give up prompting after 3 min
   const PER_ATTEMPT_TIMEOUT_MS = 20 * 1000;
