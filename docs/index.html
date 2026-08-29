@@ -199,6 +199,27 @@
     text-decoration: none;
   }
   #open-elsewhere:not(.hidden) { display: inline-block; }
+
+  /* Always-visible manual refresh — GitHub Pages' CDN caches this file for
+     up to 10 min, and there's no reload button at all once this is running
+     as a standalone home-screen app (no Safari chrome). Tapping this does
+     a cache-busted reload so you're never stuck looking at a stale build. */
+  #force-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: max(0.6rem, env(safe-area-inset-top));
+    left: 0.6rem;
+    z-index: 20;
+    width: 1.9rem;
+    height: 1.9rem;
+    background: rgba(0, 0, 0, 0.55);
+    color: white;
+    font-size: 1rem;
+    border-radius: 999px;
+    text-decoration: none;
+  }
 </style>
 </head>
 <body id="body" class="state-blocked">
@@ -232,6 +253,7 @@
 
   <iframe id="app-frame" class="hidden" title="PDF Splitter"></iframe>
   <a id="open-elsewhere" class="hidden" href="#">Open in Safari instead &#8599;</a>
+  <a id="force-refresh" href="#" title="Reload the latest version" aria-label="Reload the latest version">&#8635;</a>
 
 <script>
 (() => {
@@ -253,6 +275,19 @@
   const launcherChromeEl = document.getElementById("launcher-chrome");
   const appFrameEl = document.getElementById("app-frame");
   const openElsewhereEl = document.getElementById("open-elsewhere");
+  const forceRefreshEl = document.getElementById("force-refresh");
+
+  // A plain reload can still be answered from GitHub Pages' CDN cache
+  // (Cache-Control: max-age=600). Appending a unique query string makes
+  // this a "different" URL as far as caching is concerned, guaranteeing a
+  // real fetch of the latest deployed file — the PWA equivalent of a hard
+  // refresh, works the same on desktop, in Safari, or embedded standalone.
+  forceRefreshEl.addEventListener("click", (e) => {
+    e.preventDefault();
+    const url = new URL(window.location.href);
+    url.searchParams.set("_", Date.now().toString());
+    window.location.href = url.toString();
+  });
 
   if (!APP_URL || APP_URL.startsWith("REPLACE_WITH")) {
     configuredEl.classList.add("hidden");
