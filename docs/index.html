@@ -327,15 +327,49 @@
 
   const startedAt = Date.now();
 
-  function fetchWithTimeout(url, ms) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ms);
-    return fetch(url, { cache: "no-store", signal: controller.signal })
-      .finally(() => clearTimeout(timer));
-  }
-
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // Ping via a hidden iframe instead of fetch(). fetch()/XHR to a
+  // cross-origin host is exactly what ad blockers, tracking-prevention
+  // features, and security extensions tend to intercept — while a plain
+  // page load (which is all an iframe navigation is) generally isn't,
+  // since that's core browser navigation rather than a scriptable API call.
+  // This is the same mechanism "Force open"/"Continue" already use
+  // successfully, just pointed at /health and hidden off-screen.
+  function pingViaIframe(url, ms) {
+    return new Promise((resolve, reject) => {
+      const probe = document.createElement("iframe");
+      probe.style.display = "none";
+      probe.setAttribute("aria-hidden", "true");
+      let settled = false;
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        probe.remove();
+        reject(new Error("timeout"));
+      }, ms);
+
+      probe.onload = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        probe.remove();
+        resolve();
+      };
+      probe.onerror = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        probe.remove();
+        reject(new Error("load error"));
+      };
+
+      document.body.appendChild(probe);
+      probe.src = url;
+    });
   }
 
   // Stays on screen until you tap through — it never auto-navigates, so
@@ -391,17 +425,14 @@
       );
 
       try {
-        const res = await fetchWithTimeout(healthUrl, PER_ATTEMPT_TIMEOUT_MS);
-        if (res.ok) {
-          setReady();
-          return; // stop polling; wait for the user to tap "Continue"
-        }
-        lastErrorText = `server responded HTTP ${res.status}`;
+        await pingViaIframe(healthUrl, PER_ATTEMPT_TIMEOUT_MS);
+        setReady();
+        return; // stop polling; wait for the user to tap "Continue"
       } catch (e) {
         lastErrorText =
-          e && e.name === "AbortError"
+          e && e.message === "timeout"
             ? `timed out after ${PER_ATTEMPT_TIMEOUT_MS / 1000}s waiting for a response`
-            : `${(e && e.name) || "Error"}: ${(e && e.message) || e}`;
+            : `${(e && e.message) || e}`;
       }
 
       await sleep(RETRY_DELAY_MS);
