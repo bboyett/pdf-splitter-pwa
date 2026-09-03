@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="format-detection" content="telephone=no">
   <title>PDF Splitter</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -37,6 +39,11 @@
       <div class="cut-controls">
         <button id="clear-cuts">Clear cuts on this page</button>
       </div>
+      <div class="trim-controls">
+        <span class="trim-label">Trim sides:</span>
+        <span id="trim-readout">none</span>
+        <button id="reset-trim">Reset</button>
+      </div>
       <div class="split-controls">
         <label>
           Download as:
@@ -49,7 +56,7 @@
       </div>
     </div>
 
-    <p class="hint">Click on the image to add a cut line. Click a line to delete it. Drag a line to adjust it.</p>
+    <p class="hint">Click on the image to add a horizontal cut line. Click a line to delete it. Drag a line to adjust it. Drag the blue side guides inward to trim the left/right margins &mdash; shaded areas are discarded from every page.</p>
 
     <div id="viewer">
       <div id="image-wrap">

@@ -117,10 +117,31 @@ def build_boundaries(cuts_px, height_px):
     return boundaries
 
 
-def build_split_writer(reader, cuts_by_page, pages_meta):
+def resolve_trim(trim):
+    # trim is {"left": frac, "right": frac} — fractions of page width to discard
+    # from each side, shared across every page. Clamp to something sane so a
+    # bad value can't produce a zero- or negative-width box.
+    trim = trim or {}
+    try:
+        left = float(trim.get("left", 0) or 0)
+    except (TypeError, ValueError):
+        left = 0.0
+    try:
+        right = float(trim.get("right", 0) or 0)
+    except (TypeError, ValueError):
+        right = 0.0
+    left = min(max(left, 0.0), 0.45)
+    right = min(max(right, 0.0), 0.45)
+    if left + right > 0.9:
+        left, right = 0.0, 0.0
+    return left, right
+
+
+def build_split_writer(reader, cuts_by_page, pages_meta, trim=None):
     writer = PdfWriter()
 
     meta_by_page = {p["page_num"]: p for p in pages_meta}
+    left_frac, right_frac = resolve_trim(trim)
 
     for page_idx in range(len(reader.pages)):
         meta = meta_by_page.get(page_idx)
@@ -133,6 +154,9 @@ def build_split_writer(reader, cuts_by_page, pages_meta):
         height_px = meta["height_px"]
         scale = height_pt / height_px
 
+        x_left = width_pt * left_frac
+        x_right = width_pt - width_pt * right_frac
+
         cuts_px = cuts_by_page.get(str(page_idx), cuts_by_page.get(page_idx, []))
         boundaries = build_boundaries(cuts_px, height_px)
 
@@ -142,7 +166,7 @@ def build_split_writer(reader, cuts_by_page, pages_meta):
             pdf_top = height_pt - row_top * scale
             pdf_bottom = height_pt - row_bottom * scale
             new_page = writer.add_page(src_page)
-            box = RectangleObject((0, pdf_bottom, width_pt, pdf_top))
+            box = RectangleObject((x_left, pdf_bottom, x_right, pdf_top))
             new_page.mediabox = box
             new_page.cropbox = box
 
@@ -156,6 +180,7 @@ def split():
     cuts_by_page = data.get("cuts", {})
     pages_meta = data.get("pages", [])
     mode = data.get("mode", "single")
+    trim = data.get("trim")
 
     if not file_id:
         return jsonify({"error": "file_id is required"}), 400
@@ -179,7 +204,7 @@ def split():
                 meta = meta_by_page.get(page_idx)
                 if meta is None:
                     continue
-                single_writer = build_split_writer(reader, {str(page_idx): cuts_by_page.get(str(page_idx), [])}, [meta])
+                single_writer = build_split_writer(reader, {str(page_idx): cuts_by_page.get(str(page_idx), [])}, [meta], trim)
                 for slice_idx in range(len(single_writer.pages)):
                     out = io.BytesIO()
                     slice_writer = PdfWriter()
@@ -189,7 +214,7 @@ def split():
         buf.seek(0)
         return send_file(buf, mimetype="application/zip", as_attachment=True, download_name="split_pages.zip")
 
-    writer = build_split_writer(reader, cuts_by_page, pages_meta)
+    writer = build_split_writer(reader, cuts_by_page, pages_meta, trim)
     out = io.BytesIO()
     writer.write(out)
     out.seek(0)

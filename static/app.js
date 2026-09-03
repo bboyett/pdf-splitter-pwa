@@ -8,6 +8,8 @@
   const nextBtn = document.getElementById("next-page");
   const pageIndicator = document.getElementById("page-indicator");
   const clearCutsBtn = document.getElementById("clear-cuts");
+  const resetTrimBtn = document.getElementById("reset-trim");
+  const trimReadout = document.getElementById("trim-readout");
   const modeSelect = document.getElementById("mode-select");
   const splitBtn = document.getElementById("split-btn");
   const filenameInput = document.getElementById("filename-input");
@@ -87,7 +89,19 @@
     pages: [],
     currentPage: 0,
     cutsByPage: {}, // pageNum -> [naturalPixelY, ...]
+    trim: { left: 0, right: 0 }, // fractions of page width discarded per side, all pages
   };
+
+  const MIN_KEEP_FRAC = 0.05; // never let the two guides collapse past this
+
+  // Timestamp of the last cut/trim handle drag or tap. The overlay's
+  // "tap empty space to add a cut" handler ignores taps right after one, so
+  // finishing a drag near the image edge can't drop a stray cut line.
+  let lastHandleInteraction = 0;
+  // Live references to the trim shade/guide DOM nodes so a drag can reposition
+  // them in place instead of rebuilding the overlay every pointermove (a
+  // rebuild would destroy the node the touch pointer is captured to).
+  let trimEls = null;
 
   function currentPageMeta() {
     return state.pages[state.currentPage];
@@ -122,6 +136,7 @@
       state.pages = data.pages;
       state.currentPage = 0;
       state.cutsByPage = {};
+      state.trim = { left: 0, right: 0 };
 
       uploadStatus.textContent = `Loaded ${data.pages.length} page(s).`;
       workspace.classList.remove("hidden");
@@ -152,6 +167,10 @@
 
   function naturalHeight() {
     return pageImage.naturalHeight;
+  }
+
+  function naturalWidth() {
+    return pageImage.naturalWidth;
   }
 
   function displayScale() {
@@ -186,8 +205,12 @@
   function renderOverlay() {
     syncOverlaySize();
     overlay.innerHTML = "";
+    trimEls = null;
     const scale = displayScale();
-    const cuts = currentCuts().slice().sort((a, b) => a - b);
+    // Keep the model sorted so a line's array index always matches its
+    // visual order — the drag handlers rely on that.
+    currentCuts().sort((a, b) => a - b);
+    const cuts = currentCuts();
     const boundaries = [0, ...cuts, naturalHeight()];
 
     cuts.forEach((cutY, idx) => {
@@ -214,10 +237,119 @@
       finalBadge.textContent = `${formatInches(pxToPt(lastGapPx))} in`;
       overlay.appendChild(finalBadge);
     }
+
+    renderTrim();
+    updateTrimReadout();
+  }
+
+  function renderTrim() {
+    // Both shades always exist (width 0 when that side isn't trimmed) so a
+    // drag starting from the edge has a node to resize. They sit behind the
+    // cut lines; the draggable guides sit on top.
+    const leftShade = document.createElement("div");
+    leftShade.className = "trim-shade";
+    const rightShade = document.createElement("div");
+    rightShade.className = "trim-shade";
+    overlay.insertBefore(rightShade, overlay.firstChild);
+    overlay.insertBefore(leftShade, overlay.firstChild);
+
+    const leftLine = document.createElement("div");
+    leftLine.className = "trim-line";
+    const leftBadge = document.createElement("span");
+    leftBadge.className = "badge";
+    leftLine.appendChild(leftBadge);
+    attachTrimHandlers(leftLine, "left");
+
+    const rightLine = document.createElement("div");
+    rightLine.className = "trim-line";
+    const rightBadge = document.createElement("span");
+    rightBadge.className = "badge";
+    rightLine.appendChild(rightBadge);
+    attachTrimHandlers(rightLine, "right");
+
+    overlay.appendChild(leftLine);
+    overlay.appendChild(rightLine);
+
+    trimEls = { leftShade, rightShade, leftLine, rightLine, leftBadge, rightBadge };
+    positionTrim();
+  }
+
+  function positionTrim() {
+    if (!trimEls) return;
+    const wDisp = naturalWidth() * displayScale();
+    const meta = currentPageMeta();
+    const leftX = state.trim.left * wDisp;
+    const rightX = (1 - state.trim.right) * wDisp;
+
+    trimEls.leftShade.style.left = "0px";
+    trimEls.leftShade.style.width = `${Math.max(0, leftX)}px`;
+    trimEls.leftShade.style.display = state.trim.left > 0 ? "block" : "none";
+
+    trimEls.rightShade.style.left = `${rightX}px`;
+    trimEls.rightShade.style.width = `${Math.max(0, wDisp - rightX)}px`;
+    trimEls.rightShade.style.display = state.trim.right > 0 ? "block" : "none";
+
+    trimEls.leftLine.style.left = `${leftX}px`;
+    trimEls.rightLine.style.left = `${rightX}px`;
+
+    if (meta) {
+      trimEls.leftBadge.textContent = `${formatInches(state.trim.left * meta.width_pt)} in`;
+      trimEls.rightBadge.textContent = `${formatInches(state.trim.right * meta.width_pt)} in`;
+    }
+    trimEls.leftBadge.style.display = state.trim.left > 0 ? "block" : "none";
+    trimEls.rightBadge.style.display = state.trim.right > 0 ? "block" : "none";
+  }
+
+  function attachTrimHandlers(lineEl, side) {
+    // Swallow the click so it doesn't bubble to the overlay's add-a-cut handler.
+    lineEl.addEventListener("click", (e) => e.stopPropagation());
+    lineEl.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      lineEl.classList.add("dragging");
+
+      function onMove(ev) {
+        const rect = pageImage.getBoundingClientRect();
+        let frac = (ev.clientX - rect.left) / rect.width;
+        frac = Math.max(0, Math.min(1, frac));
+        if (side === "left") {
+          state.trim.left = Math.max(0, Math.min(frac, 1 - state.trim.right - MIN_KEEP_FRAC));
+        } else {
+          state.trim.right = Math.max(0, Math.min(1 - frac, 1 - state.trim.left - MIN_KEEP_FRAC));
+        }
+        positionTrim();
+        updateTrimReadout();
+      }
+
+      function endDrag() {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", endDrag);
+        window.removeEventListener("pointercancel", endDrag);
+        lineEl.classList.remove("dragging");
+        lastHandleInteraction = Date.now();
+        renderOverlay();
+      }
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", endDrag);
+      window.addEventListener("pointercancel", endDrag);
+    });
+  }
+
+  function updateTrimReadout() {
+    const meta = currentPageMeta();
+    if (!meta) return;
+    if (state.trim.left === 0 && state.trim.right === 0) {
+      trimReadout.textContent = "none";
+      return;
+    }
+    const l = formatInches(state.trim.left * meta.width_pt);
+    const r = formatInches(state.trim.right * meta.width_pt);
+    trimReadout.textContent = `${l} in left, ${r} in right (all pages)`;
   }
 
   function attachLineHandlers(lineEl, index) {
-    lineEl.addEventListener("mousedown", (e) => {
+    lineEl.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       e.preventDefault();
       const startClientY = e.clientY;
@@ -225,34 +357,38 @@
       lineEl.classList.add("dragging");
 
       function onMove(ev) {
-        const delta = Math.abs(ev.clientY - startClientY);
-        if (delta > DRAG_THRESHOLD_PX) {
-          dragging = true;
-          const naturalY = clientYToNatural(ev.clientY);
-          const cuts = currentCuts();
-          cuts[index] = naturalY;
-          renderOverlay();
-        }
+        if (!dragging && Math.abs(ev.clientY - startClientY) <= DRAG_THRESHOLD_PX) return;
+        dragging = true;
+        const naturalY = clientYToNatural(ev.clientY);
+        currentCuts()[index] = naturalY;
+        // Move just this node while dragging. A full renderOverlay() here would
+        // delete it mid-gesture and cut off the touch pointer event stream.
+        lineEl.style.top = `${naturalY * displayScale()}px`;
       }
 
-      function onUp() {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
+      function endDrag() {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", endDrag);
+        window.removeEventListener("pointercancel", endDrag);
+        lineEl.classList.remove("dragging");
+        lastHandleInteraction = Date.now();
         if (!dragging) {
-          const cuts = currentCuts();
-          cuts.splice(index, 1);
-          renderOverlay();
-        } else {
-          renderOverlay();
+          currentCuts().splice(index, 1);
         }
+        renderOverlay();
       }
 
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", endDrag);
+      window.addEventListener("pointercancel", endDrag);
     });
   }
 
   overlay.addEventListener("click", (e) => {
+    // Only a tap on empty overlay adds a cut — not one bubbling up from a
+    // guide, nor the click synthesized right after a drag ends near an edge.
+    if (e.target !== overlay) return;
+    if (Date.now() - lastHandleInteraction < 400) return;
     const naturalY = clientYToNatural(e.clientY);
     currentCuts().push(naturalY);
     renderOverlay();
@@ -272,8 +408,31 @@
     state.cutsByPage[state.currentPage] = [];
     renderOverlay();
   });
+  resetTrimBtn.addEventListener("click", () => {
+    state.trim = { left: 0, right: 0 };
+    renderOverlay();
+  });
 
   uploadBtn.addEventListener("click", uploadFile);
+
+  async function tryShareFile(blob, filename) {
+    // iOS / iPadOS Safari has no showSaveFilePicker and ignores <a download>.
+    // The Web Share API (level 2) hands the file to the OS share sheet, where
+    // "Save to Files" is one tap away.
+    if (!navigator.canShare || !navigator.share) return false;
+    const type =
+      blob.type || (filename.toLowerCase().endsWith(".zip") ? "application/zip" : "application/pdf");
+    const file = new File([blob], filename, { type });
+    if (!navigator.canShare({ files: [file] })) return false;
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return true;
+    } catch (e) {
+      if (e.name === "AbortError") return true; // dismissed — don't also download
+      console.warn("Share failed, falling back to download:", e);
+      return false;
+    }
+  }
 
   async function pickSaveTarget(suggestedName) {
     if (!window.showSaveFilePicker) return null;
@@ -330,6 +489,7 @@
           cuts,
           pages: state.pages,
           mode: modeSelect.value,
+          trim: state.trim,
         }),
       });
       if (!res.ok) {
@@ -342,6 +502,8 @@
         const writable = await saveHandle.createWritable();
         await writable.write(blob);
         await writable.close();
+      } else if (await tryShareFile(blob, filename)) {
+        // Handed off to the OS share sheet (iOS/iPadOS "Save to Files", etc.).
       } else {
         // Fallback for browsers without the File System Access API
         // (Firefox, Safari): normal browser download to the Downloads folder.
